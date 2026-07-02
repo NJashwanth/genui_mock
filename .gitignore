@@ -31,6 +31,8 @@ migrate_working_dir/
 .flutter-plugins-dependencies
 /build/
 /coverage/
+example/build/
+example/.flutter-plugins-dependencies
 
 # Local secrets / environment
 .env
