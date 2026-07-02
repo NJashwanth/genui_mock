@@ -1,5 +1,7 @@
 # genui_mock
 
+[![pub package](https://img.shields.io/pub/v/genui_mock.svg)](https://pub.dev/packages/genui_mock)
+
 Record a real [GenUI](https://pub.dev/packages/genui) streaming session once,
 save it as a small git-diffable JSON fixture, and replay it later with **zero
 network calls, no API key, and fully deterministic output**.
@@ -69,7 +71,24 @@ await File('test/fixtures/weather_forecast.json').writeAsString(fixture.encode()
 ```
 
 The saved fixture is plain, pretty-printed JSON — readable and diffable in
-code review, so you can see exactly what changed when you re-record it.
+code review, so you can see exactly what changed when you re-record it:
+
+```json
+{
+  "formatVersion": 1,
+  "name": "weather_forecast",
+  "description": "user asks for a 3-day forecast",
+  "recordedAt": "2026-07-02T10:15:00.000Z",
+  "turns": [
+    {
+      "chunks": [
+        { "text": "{\"beginRendering\": ...", "delayMs": 412 },
+        { "text": "{\"surfaceUpdate\": ...", "delayMs": 96 }
+      ]
+    }
+  ]
+}
+```
 
 ### 2. Replay the fixture in a test
 
@@ -92,6 +111,9 @@ await conversation.sendRequest(ChatMessage.user('what is the weather?'));
 Each call to `sendRequest` replays the fixture's next recorded turn, so a
 multi-turn fixture drives a multi-turn conversation the same way it was
 recorded.
+
+See the [example](example/) for a complete runnable app that replays a
+fixture through GenUI's real widgets.
 
 ### 3. Choose how fast to replay
 
