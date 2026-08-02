@@ -1,3 +1,4 @@
+import 'package:a2ui_core/a2ui_core.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:genui/genui.dart';
 import 'package:genui_mock/genui_mock.dart';
@@ -46,8 +47,8 @@ void main() {
       await transport.sendRequest(ChatMessage.user('hi'));
       final message = await messageFuture;
 
-      expect(message, isA<CreateSurface>());
-      expect((message as CreateSurface).surfaceId, 's1');
+      expect(message, isA<CreateSurfaceMessage>());
+      expect((message as CreateSurfaceMessage).surfaceId, 's1');
       expect(message.catalogId, 'core');
     });
 

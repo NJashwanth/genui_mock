@@ -13,6 +13,7 @@ library;
 
 import 'dart:async';
 
+import 'package:a2ui_core/a2ui_core.dart' as core;
 import 'package:genui/genui.dart';
 
 import 'fixture.dart';
@@ -62,7 +63,7 @@ class GenUiMockTransport implements Transport {
   Stream<String> get incomingText => _adapter.incomingText;
 
   @override
-  Stream<A2uiMessage> get incomingMessages => _adapter.incomingMessages;
+  Stream<core.A2uiMessage> get incomingMessages => _adapter.incomingMessages;
 
   @override
   Future<void> sendRequest(ChatMessage message) async {

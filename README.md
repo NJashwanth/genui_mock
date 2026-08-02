@@ -25,20 +25,25 @@ in CI, with no API key required.
 
 ## What genui version was this built against?
 
-`genui` `0.9.2` (the latest published version as of writing). The one
+`genui` `0.10.1` (the latest published version as of writing). The one
 integration point this package depends on — the `Transport` interface — was
-introduced in `genui` `0.8.0` and has not changed since; see [Design](#design)
-below for why that's the seam this package is built on.
+introduced in `genui` `0.8.0` and has not changed shape since (still four
+methods: `incomingText`, `incomingMessages`, `sendRequest`, `dispose`); see
+[Design](#design) below for why that's the seam this package is built on.
+`genui` `0.10.0` did move the A2UI message types (`A2uiMessage`,
+`CreateSurfaceMessage`, etc.) out into `package:a2ui_core`, which is why
+`genui_mock` now depends on `a2ui_core` directly too.
 
 ## Install
 
 ```yaml
 dev_dependencies:
-  genui_mock: ^0.1.0
+  genui_mock: ^0.1.1
 ```
 
-`genui_mock` depends on `genui` directly (not just as a dev dependency),
-since `GenUiMockTransport` implements `genui`'s real `Transport` interface.
+`genui_mock` depends on `genui` (and, transitively, `a2ui_core`) directly
+rather than just as a dev dependency, since `GenUiMockTransport` implements
+`genui`'s real `Transport` interface.
 
 ## Usage
 
