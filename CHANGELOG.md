@@ -1,3 +1,15 @@
+## 0.1.1
+
+* Upgrade to `genui` `^0.10.1` (from `0.9.2`).
+* `genui` 0.10.0 moved its A2UI message types (e.g. `A2uiMessage`,
+  `CreateSurface` → `CreateSurfaceMessage`) out to `package:a2ui_core` and
+  stopped re-exporting them. `GenUiMockTransport.incomingMessages` is now
+  typed against `a2ui_core`'s `A2uiMessage`, and `genui_mock` now depends on
+  `a2ui_core: ^0.1.0` directly.
+* No change to the fixture format or the JSON wire protocol — this is a
+  Dart-type-only migration on genui's side, so existing recorded fixtures
+  keep working unchanged.
+
 ## 0.1.0
 
 * Initial release.
