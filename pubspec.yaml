@@ -3,7 +3,7 @@ description: >-
   Record, save, and replay GenUI streaming sessions as deterministic,
   git-diffable JSON fixtures. Test Catalog widgets against real recorded
   model output with zero network calls.
-version: 0.1.1
+version: 0.1.2
 homepage: https://github.com/NJashwanth/genui_mock
 repository: https://github.com/NJashwanth/genui_mock
 issue_tracker: https://github.com/NJashwanth/genui_mock/issues
@@ -20,7 +20,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  genui: ^0.10.1
+  genui: ^0.10.2
   a2ui_core: ^0.1.0
 
 dev_dependencies:

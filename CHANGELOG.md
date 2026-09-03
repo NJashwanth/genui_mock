@@ -1,3 +1,19 @@
+## 0.1.2
+
+* Upgrade to `genui` `^0.10.2` (from `0.10.1`).
+* `genui` 0.10.2 fixed `A2uiTransportAdapter.incomingText` trimming every
+  streamed chunk. Since `GenUiMockTransport` replays fixtures *through* that
+  adapter, replayed prose is now emitted with its recorded whitespace intact:
+  a sentence recorded across two chunks (`'the quick '` + `'brown fox'`) used
+  to arrive as `'the quickbrown fox'`, and now round-trips byte for byte.
+* The constraint is `^0.10.2` rather than `^0.10.1` deliberately — byte-for-byte
+  replay is this package's core promise, and 0.10.1 cannot deliver it.
+* If you had assertions that worked around the old trimming (e.g. expecting
+  `'Hello.'` for a recorded `'Hello.\n'`), they need updating to expect the
+  recorded text. No other API or behavior change.
+* No change to the fixture format — existing recorded fixtures keep working
+  unchanged, and now replay more faithfully than before.
+
 ## 0.1.1
 
 * Upgrade to `genui` `^0.10.1` (from `0.9.2`).

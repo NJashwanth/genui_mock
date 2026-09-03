@@ -35,7 +35,7 @@ void main() {
       final textFuture = transport.incomingText.first;
       await transport.sendRequest(ChatMessage.user('hi'));
 
-      expect(await textFuture, 'Sure, here you go.');
+      expect(await textFuture, 'Sure, here you go.\n');
     });
 
     test('parses recorded JSON chunks into real A2uiMessage objects via '
@@ -58,7 +58,7 @@ void main() {
 
       final firstText = transport.incomingText.first;
       await transport.sendRequest(ChatMessage.user('first question'));
-      expect(await firstText, 'Sure, here you go.');
+      expect(await firstText, 'Sure, here you go.\n');
 
       final secondText = transport.incomingText.first;
       await transport.sendRequest(ChatMessage.user('second question'));
@@ -73,6 +73,33 @@ void main() {
       await transport.sendRequest(ChatMessage.user('second question'));
 
       expect(transport.sentMessages, hasLength(2));
+    });
+
+    test('replays text chunks verbatim, so a sentence split across chunks '
+        'concatenates back byte for byte', () async {
+      // Regression guard for the chunk-trimming bug fixed in genui 0.10.2:
+      // the adapter used to trim every chunk, which turned the two chunks
+      // below into 'the quickbrown fox'. Byte-for-byte replay is the whole
+      // point of a fixture, so assert on it directly.
+      final fixture = GenUiFixture(
+        name: 'split_sentence',
+        recordedAt: DateTime.utc(2026),
+        turns: [
+          RecordedTurn(
+            chunks: [
+              const RecordedChunk(text: 'the quick ', delay: Duration.zero),
+              const RecordedChunk(text: 'brown fox', delay: Duration.zero),
+            ],
+          ),
+        ],
+      );
+      final transport = GenUiMockTransport(fixture);
+      addTearDown(transport.dispose);
+
+      final textFuture = transport.incomingText.take(2).join();
+      await transport.sendRequest(ChatMessage.user('hi'));
+
+      expect(await textFuture, 'the quick brown fox');
     });
 
     test(
