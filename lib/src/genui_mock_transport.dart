@@ -8,7 +8,8 @@
 ///
 /// Parsing of A2UI messages out of raw text chunks is delegated entirely to
 /// GenUI's own `A2uiTransportAdapter`, so this package never has to track
-/// (or fall behind) the A2UI wire format itself.
+/// (or fall behind) the A2UI wire format itself. That delegation is also why
+/// this file requires `genui` >= 0.10.2 — see [GenUiMockTransport.incomingText].
 library;
 
 import 'dart:async';
@@ -59,6 +60,13 @@ class GenUiMockTransport implements Transport {
   List<ChatMessage> get sentMessages => List.unmodifiable(_sentMessages);
   final List<ChatMessage> _sentMessages = [];
 
+  /// The recorded prose, streamed back chunk by chunk exactly as it was
+  /// recorded — whitespace included, so concatenating the chunks reproduces
+  /// the original text byte for byte.
+  ///
+  /// Requires `genui` >= 0.10.2: earlier versions trimmed every chunk inside
+  /// `A2uiTransportAdapter`, which dropped the whitespace at chunk boundaries
+  /// and ran words together when a sentence spanned more than one chunk.
   @override
   Stream<String> get incomingText => _adapter.incomingText;
 
