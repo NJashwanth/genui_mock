@@ -1,3 +1,19 @@
+## 0.1.3
+
+* Upgrade to `genui` `^0.10.4` (from `0.10.2`).
+* `genui` 0.10.3 changed `basicCatalogId` to the canonical
+  `https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json` and kept
+  the old `https://a2ui.org/specification/v0_9/basic_catalog.json` as an
+  alias. Fixtures recorded before 0.10.3 have the old id baked into their
+  `createSurface` chunks; they still render against the basic catalog, and a
+  new test covers both ids so that stays true.
+* `genui` 0.10.4 makes `Image` read the catalog's `description` property as
+  accessibility text. Recorded `Image` components that carried a
+  `description` now get it announced on replay, with no fixture change.
+* The example's fixture now uses the canonical catalog id, which is what new
+  recordings will contain.
+* No API change and no change to the fixture format.
+
 ## 0.1.2
 
 * Upgrade to `genui` `^0.10.2` (from `0.10.1`).

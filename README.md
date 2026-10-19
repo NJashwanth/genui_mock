@@ -1,183 +1,253 @@
 # genui_mock
 
 [![pub package](https://img.shields.io/pub/v/genui_mock.svg)](https://pub.dev/packages/genui_mock)
+[![pub points](https://img.shields.io/pub/points/genui_mock)](https://pub.dev/packages/genui_mock/score)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 Test your [GenUI](https://pub.dev/packages/genui) widgets against real model
-output — without the network.
+output, without the network.
 
 Record a live streaming session once, save it as a small JSON fixture, and
-replay it in your tests as many times as you like: no API key, no latency, no
-flaky non-determinism.
+replay it in your tests as often as you like.
 
-> **Unofficial.** An independent, community-built testing utility. Not
-> published, endorsed, or supported by Google or the Flutter team — the name
-> just describes what the package is for.
+- **No network, no API key.** Tests run offline and in CI.
+- **Deterministic.** The same bytes arrive in the same order every run, so you
+  can assert on what renders.
+- **Real rendering.** Fixtures play through GenUI's own `Conversation`,
+  `SurfaceController`, and catalog widgets. Only the source of the bytes is
+  swapped out.
+- **Reviewable.** Fixtures are pretty-printed JSON, so re-recording shows up as
+  a readable diff in your pull request.
 
-## What a test looks like
+## Quick start
 
-```dart
-testWidgets('renders the recorded greeting', (tester) async {
-  final fixture = GenUiFixture.decode(
-    await File('test/fixtures/greeting.json').readAsString(),
-  );
-
-  final transport = GenUiMockTransport(fixture);
-  final controller = SurfaceController(catalogs: [BasicCatalogItems.asCatalog()]);
-  final conversation = Conversation(transport: transport, controller: controller);
-
-  await conversation.sendRequest(ChatMessage.user('say hello'));
-
-  await tester.pumpWidget(MaterialApp(
-    home: Surface(surfaceContext: controller.contextFor('greeting')),
-  ));
-
-  expect(find.text('Hello!'), findsOneWidget);
-});
-```
-
-That's a real GenUI `Conversation`, a real `SurfaceController`, and real
-catalog widgets. The only thing swapped out is where the bytes come from.
-
-## Why
-
-`genui` is alpha and its API moves fast. Every time you tweak a `Catalog`
-widget, checking that it still renders usually means burning an API call and
-waiting on the network — and the model's output isn't stable enough to assert
-against anyway.
-
-Record what the model actually said once, then replay those exact bytes
-forever.
-
-## Install
+### 1. Install
 
 ```yaml
 dev_dependencies:
-  genui_mock: ^0.1.2
+  genui_mock: ^0.1.3
 ```
 
-`genui_mock` depends on `genui` directly (not just as a dev dependency),
-because `GenUiMockTransport` implements `genui`'s real `Transport` interface.
+### 2. Record a session
 
-## Recording a fixture
-
-You already pipe a `Stream<String>` of model chunks into `genui`. Wrap that
-stream with a `GenUiSessionRecorder` and use the stream it returns instead.
+You already pipe a `Stream<String>` of model chunks into GenUI. Wrap that
+stream with a `GenUiSessionRecorder` and use the stream it returns instead:
 
 ```dart
 final recorder = GenUiSessionRecorder(
-  name: 'weather_forecast',
-  description: 'user asks for a 3-day forecast',
+  name: 'greeting',
+  description: 'user asks for a friendly greeting',
 );
 
-// Per user turn — pass the recorded stream where you passed the raw one:
+// Once per user turn, pass the recorded stream where you passed the raw one:
 await for (final chunk in recorder.recordTurn(rawChunksFromYourModel())) {
   transportAdapter.addChunk(chunk);
 }
 
 // When the session is done:
-await File('test/fixtures/weather_forecast.json')
+await File('test/fixtures/greeting.json')
     .writeAsString(recorder.toFixture().encode());
 ```
 
-Recording is transparent: every chunk is forwarded through untouched, so your
-app behaves exactly as it did before. The recorder just notes each chunk's
-text and how long it took to arrive.
+Every chunk is forwarded unchanged, so your app behaves exactly as before. The
+recorder only notes each chunk's text and how long it took to arrive.
 
-Call `recordTurn` once per request/response cycle. Each call appends one turn,
-and you can label them (`recordTurn(chunks, label: 'asks for tomorrow')`) to
-keep a multi-turn fixture readable.
+### 3. Replay it in a test
+
+```dart
+import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:genui/genui.dart';
+import 'package:genui_mock/genui_mock.dart';
+
+void main() {
+  testWidgets('renders the recorded greeting', (tester) async {
+    final fixture = GenUiFixture.decode(
+      File('test/fixtures/greeting.json').readAsStringSync(),
+    );
+
+    final transport = GenUiMockTransport(fixture);
+    final controller = SurfaceController(
+      catalogs: [BasicCatalogItems.asCatalog()],
+    );
+    final conversation = Conversation(
+      transport: transport,
+      controller: controller,
+    );
+    addTearDown(conversation.dispose);
+
+    await conversation.sendRequest(ChatMessage.user('say hello'));
+
+    await tester.pumpWidget(MaterialApp(
+      home: Surface(surfaceContext: controller.contextFor('greeting')),
+    ));
+
+    expect(find.text('Hello!'), findsOneWidget);
+  });
+}
+```
+
+Use `readAsStringSync` to load fixtures inside `testWidgets`. Real async file
+I/O can hang there because the test body runs in a fake-async zone.
+
+For a complete runnable app, see [example/](example/).
 
 ## The fixture file
-
-Plain, pretty-printed JSON — reviewable in a pull request, so you can see
-exactly what changed when you re-record:
 
 ```json
 {
   "formatVersion": 1,
-  "name": "weather_forecast",
-  "description": "user asks for a 3-day forecast",
+  "name": "greeting",
+  "description": "user asks for a friendly greeting",
   "recordedAt": "2026-07-02T10:15:00.000Z",
   "turns": [
     {
+      "label": "asks for a greeting",
       "chunks": [
-        { "text": "Here's your forecast:\n", "delayMs": 412 },
-        { "text": "```json\n{\"version\": \"v0.9\", \"createSurface\": ...", "delayMs": 96 }
+        { "text": "Here you go:\n", "delayMs": 0 },
+        { "text": "```json\n{\"version\": \"v0.9\", \"createSurface\": {\"surfaceId\": \"greeting\", \"catalogId\": \"https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json\"}}\n```", "delayMs": 300 },
+        { "text": "```json\n{\"version\": \"v0.9\", \"updateComponents\": {\"surfaceId\": \"greeting\", \"components\": [{\"id\": \"root\", \"component\": \"Text\", \"text\": \"Hello!\"}]}}\n```", "delayMs": 400 }
       ]
     }
   ]
 }
 ```
 
-A turn is the ordered list of raw text chunks that arrived after one
-`sendRequest`, captured *before* any A2UI parsing. Recording at that layer
-means the fixture holds precisely what the model said, with no lossy
-intermediate representation — and replay re-emits those chunks verbatim,
-whitespace included, so concatenating them reproduces the original text byte
-for byte.
+A **turn** is the ordered list of raw text chunks that arrived after one
+`sendRequest`. Each chunk records its text and the delay since the previous
+chunk.
+
+Chunks are captured *before* any A2UI parsing, so a fixture holds exactly what
+the model said. Replay re-emits them verbatim, whitespace included, so
+concatenating the chunks reproduces the original text byte for byte.
+
+`description` and `label` are optional. Label turns
+(`recordTurn(chunks, label: 'asks for tomorrow')`) to keep multi-turn fixtures
+readable.
 
 ## Replaying
 
-Each `sendRequest` call plays the fixture's next turn, so a multi-turn fixture
-drives a multi-turn conversation in the order it was recorded. Sending more
-requests than you recorded throws a `StateError` rather than hanging or
-replaying stale data.
+### Multi-turn conversations
 
-**Pacing.** By default chunks arrive back-to-back, which is what you want for
-fast tests. Replay the original timing instead to exercise loading and
-skeleton states:
+Each `sendRequest` plays the fixture's next turn, so a multi-turn fixture
+drives a multi-turn conversation in the order it was recorded. Sending more
+requests than were recorded throws a `StateError`, so a test fails loudly
+instead of hanging or replaying stale data.
+
+### Pacing
+
+By default chunks arrive back to back, which keeps tests fast. Use paced mode
+to replay the original timing:
 
 ```dart
-GenUiMockTransport(fixture);                              // instant (default)
-GenUiMockTransport(fixture, mode: PlaybackMode.paced);    // original timing
-GenUiMockTransport(fixture, mode: PlaybackMode.paced, speedMultiplier: 5); // 5x
+GenUiMockTransport(fixture);                                               // instant (default)
+GenUiMockTransport(fixture, mode: PlaybackMode.paced);                     // original timing
+GenUiMockTransport(fixture, mode: PlaybackMode.paced, speedMultiplier: 5); // 5x faster
 ```
 
-**Asserting on what you sent.** `transport.sentMessages` holds every
-`ChatMessage` passed to `sendRequest`, in order.
+### Testing loading states
 
-**Without `genui`.** `GenUiFixturePlayer` replays a fixture as a plain
-`Stream<String>`, with `hasMoreTurns` and `reset()`, if you want the chunks
-without a `Transport` at all.
+Paced replay runs on timers, so inside `testWidgets` you can step through a
+stream with `tester.pump` and assert on what is visible at each point:
 
-See [example/](example/) for a complete runnable app.
+```dart
+final transport = GenUiMockTransport(fixture, mode: PlaybackMode.paced);
+// ...controller and conversation as above...
+
+final reply = conversation.sendRequest(ChatMessage.user('say hello'));
+await tester.pumpWidget(MaterialApp(
+  home: Surface(surfaceContext: controller.contextFor('greeting')),
+));
+
+expect(find.text('Hello!'), findsNothing);   // still streaming
+
+await tester.pump(const Duration(milliseconds: 700));
+await tester.pump();
+
+expect(find.text('Hello!'), findsOneWidget); // fully rendered
+await reply;
+```
+
+### Asserting on what you sent
+
+`transport.sentMessages` holds every `ChatMessage` passed to `sendRequest`, in
+order. Use it to check that your UI sent the right prompt or action.
+
+### Without GenUI
+
+`GenUiFixturePlayer` replays a fixture as a plain `Stream<String>` with no
+`Transport` involved. That's useful for testing your own chunk handling.
+
+```dart
+final player = GenUiFixturePlayer(fixture);
+while (player.hasMoreTurns) {
+  await for (final chunk in player.playNextTurn()) {
+    // ...
+  }
+}
+player.reset(); // back to the first turn
+```
+
+## Tips
+
+- **Keep fixtures next to tests**, in `test/fixtures/`, and commit them. Name
+  them after the scenario, not the date.
+- **Re-record when your prompt, model, or catalog changes.** A fixture captures
+  one moment of model behavior, and the PR diff shows what changed.
+- **Edit fixtures by hand** to cover cases a model rarely produces, such as a
+  malformed component or an empty surface. The format is plain JSON.
+- **Build fixtures in code** with `GenUiFixture`, `RecordedTurn`, and
+  `RecordedChunk` for small, focused tests. The [example](example/lib/main.dart)
+  does this.
+
+## API at a glance
+
+| Type | What it does | Needs `genui`? |
+| --- | --- | --- |
+| `GenUiSessionRecorder` | Wraps a live chunk stream and records it into a fixture | No |
+| `GenUiFixture` | The fixture: `encode()` / `decode()` to and from JSON | No |
+| `RecordedTurn`, `RecordedChunk` | One request/response cycle, and one chunk with its delay | No |
+| `GenUiFixturePlayer`, `replayTurn` | Replay turns as a plain `Stream<String>` | No |
+| `PlaybackMode` | `instant` or `paced` | No |
+| `GenUiMockTransport` | A GenUI `Transport` that replays a fixture | Yes |
 
 ## How it works
 
-`genui`'s API has shifted a lot between releases — compare the `0.5.x` line,
-which wired rendering straight to a `ContentGenerator`, to `0.8.0`+, which
-introduced `Transport`: a four-method interface (`incomingText`,
-`incomingMessages`, `sendRequest`, `dispose`) that exists specifically to
-decouple rendering from any particular network client.
+GenUI's `Transport` is a four-method interface (`incomingText`,
+`incomingMessages`, `sendRequest`, `dispose`) that separates rendering from any
+particular network client. It has kept the same shape since `genui` `0.8.0`,
+which makes it the most stable seam in the API, so it's the only one this
+package touches.
 
-That's the most stable seam in the published API, so it's the *only* thing
-this package touches. The result is a deliberate split:
-
-| Part | Depends on `genui`? |
-| --- | --- |
-| `GenUiFixture`, `GenUiSessionRecorder`, `GenUiFixturePlayer` | No — plain Dart, just chunks and timings |
-| `GenUiMockTransport` | Yes — the single file that imports it |
-
-Everything except `GenUiMockTransport` is immune to a `genui` API change. And
-`GenUiMockTransport` parses nothing itself: it feeds chunks to `genui`'s own
+`GenUiMockTransport` is the only file that imports `genui`. Everything else is
+plain Dart and unaffected by GenUI API changes. The transport doesn't parse
+anything itself: it feeds recorded chunks to GenUI's own
 `A2uiTransportAdapter`, so this package never has to track the A2UI wire
-format. If a future release changes `Transport`, one file needs updating.
+format.
 
 ## Compatibility
 
-Built against `genui` `0.10.2`. The `Transport` interface it targets has kept
-the same shape since `0.8.0`.
+Built against `genui` `0.10.4`. Requires `genui` `^0.10.4`.
 
-Two `genui` releases affected this package:
+| `genui_mock` | `genui` | Notes |
+| --- | --- | --- |
+| `0.1.3` | `^0.10.4` | `0.10.3` renamed the basic catalog id to `…/v0_9/catalogs/basic/catalog.json` and kept the old `…/v0_9/basic_catalog.json` as an alias. Older fixtures still render. |
+| `0.1.2` | `^0.10.2` | `0.10.2` stopped trimming every streamed chunk, which is what makes byte-for-byte replay possible. |
+| `0.1.1` | `^0.10.1` | `0.10.0` moved the A2UI message types into `package:a2ui_core`. |
+| `0.1.0` | `^0.9.2` | Initial release. |
 
-- **`0.10.0`** moved the A2UI message types (`A2uiMessage`,
-  `CreateSurfaceMessage`, …) into `package:a2ui_core`, so `genui_mock` depends
-  on `a2ui_core` directly too.
-- **`0.10.2`** stopped `A2uiTransportAdapter` trimming every streamed chunk.
-  Before that fix a sentence recorded across two chunks (`"the quick "` +
-  `"brown fox"`) replayed as `"the quickbrown fox"`. Byte-for-byte replay is
-  the entire point of a fixture, so `0.10.2` is the minimum.
+None of these required re-recording fixtures. See the
+[CHANGELOG](CHANGELOG.md) for details.
+
+## Contributing
+
+Bug reports and pull requests are welcome on
+[GitHub](https://github.com/NJashwanth/genui_mock/issues). If GenUI ships a
+release that breaks replay, an issue with the failing fixture is the most
+useful thing you can send.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
