@@ -1,4 +1,5 @@
 import 'package:a2ui_core/a2ui_core.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:genui/genui.dart';
 import 'package:genui_mock/genui_mock.dart';
@@ -127,5 +128,73 @@ void main() {
         );
       },
     );
+  });
+
+  group('rendering through the basic catalog', () {
+    // genui 0.10.3 moved basicCatalogId to a new canonical URL and kept the
+    // old one as an alias. Fixtures recorded before then carry the old URL
+    // baked into their chunks, so both must keep rendering.
+    const catalogIds = {
+      'legacy': 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+      'canonical':
+          'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json',
+    };
+
+    for (final MapEntry(key: label, value: catalogId) in catalogIds.entries) {
+      testWidgets('a fixture recorded with the $label catalog id renders', (
+        tester,
+      ) async {
+        final fixture = GenUiFixture(
+          name: 'greeting_$label',
+          recordedAt: DateTime.utc(2026),
+          turns: [
+            RecordedTurn(
+              chunks: [
+                RecordedChunk(
+                  text:
+                      '```json\n'
+                      '{"version": "v0.9", "createSurface": '
+                      '{"surfaceId": "greeting", "catalogId": "$catalogId"}}\n'
+                      '```',
+                  delay: Duration.zero,
+                ),
+                const RecordedChunk(
+                  text:
+                      '```json\n'
+                      '{"version": "v0.9", "updateComponents": '
+                      '{"surfaceId": "greeting", "components": ['
+                      '{"id": "root", "component": "Text", "text": "Hello!"}'
+                      ']}}\n'
+                      '```',
+                  delay: Duration.zero,
+                ),
+              ],
+            ),
+          ],
+        );
+        final transport = GenUiMockTransport(fixture);
+        final controller = SurfaceController(
+          catalogs: [BasicCatalogItems.asCatalog()],
+        );
+        final conversation = Conversation(
+          transport: transport,
+          controller: controller,
+        );
+        addTearDown(() {
+          conversation.dispose();
+          controller.dispose();
+          transport.dispose();
+        });
+
+        await conversation.sendRequest(ChatMessage.user('say hello'));
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Surface(surfaceContext: controller.contextFor('greeting')),
+          ),
+        );
+
+        expect(find.text('Hello!'), findsOneWidget);
+      });
+    }
   });
 }

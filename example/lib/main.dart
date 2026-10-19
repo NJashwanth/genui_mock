@@ -31,7 +31,7 @@ GenUiFixture _greetingFixture() {
                 '```json\n'
                 '{"version": "v0.9", "createSurface": '
                 '{"surfaceId": "greeting", '
-                '"catalogId": "https://a2ui.org/specification/v0_9/basic_catalog.json"}}\n'
+                '"catalogId": "https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json"}}\n'
                 '```',
             delay: Duration(milliseconds: 300),
           ),
