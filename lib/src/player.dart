@@ -1,5 +1,5 @@
 /// Replays a [GenUiFixture] as a stream of text chunks, without depending on
-/// `package:genui` at all.
+/// A2UI at all.
 library;
 
 import 'dart:async';
@@ -40,7 +40,7 @@ Stream<String> replayTurn(
 }
 
 /// Replays the turns of a [GenUiFixture] in order, one per call to
-/// [playNextTurn] — mirroring how a real GenUI `Transport` gets one
+/// [playNextTurn] — mirroring how a real model transport gets one
 /// `sendRequest` call per user turn and streams back one response per call.
 class GenUiFixturePlayer {
   /// Creates a [GenUiFixturePlayer] over [fixture].

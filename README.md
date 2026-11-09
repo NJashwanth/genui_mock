@@ -4,8 +4,8 @@
 [![pub points](https://img.shields.io/pub/points/genui_mock)](https://pub.dev/packages/genui_mock/score)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Test your [GenUI](https://pub.dev/packages/genui) widgets against real model
-output, without the network.
+Test your [A2UI](https://a2ui.org/) widgets against real model output,
+without the network.
 
 Record a live streaming session once, save it as a small JSON fixture, and
 replay it in your tests as often as you like.
@@ -13,9 +13,9 @@ replay it in your tests as often as you like.
 - **No network, no API key.** Tests run offline and in CI.
 - **Deterministic.** The same bytes arrive in the same order every run, so you
   can assert on what renders.
-- **Real rendering.** Fixtures play through GenUI's own `Conversation`,
-  `SurfaceController`, and catalog widgets. Only the source of the bytes is
-  swapped out.
+- **Real rendering.** Fixtures play through A2UI's own `MessageProcessor`,
+  `A2uiSurface`, and catalog widgets. Only the source of the bytes is swapped
+  out.
 - **Reviewable.** Fixtures are pretty-printed JSON, so re-recording shows up as
   a readable diff in your pull request.
 
@@ -30,8 +30,9 @@ dev_dependencies:
 
 ### 2. Record a session
 
-You already pipe a `Stream<String>` of model chunks into GenUI. Wrap that
-stream with a `GenUiSessionRecorder` and use the stream it returns instead:
+You already read your model's reply as a `Stream<String>` of chunks. Wrap
+that stream with a `GenUiSessionRecorder` and use the stream it returns
+instead:
 
 ```dart
 final recorder = GenUiSessionRecorder(
@@ -41,7 +42,7 @@ final recorder = GenUiSessionRecorder(
 
 // Once per user turn, pass the recorded stream where you passed the raw one:
 await for (final chunk in recorder.recordTurn(rawChunksFromYourModel())) {
-  transportAdapter.addChunk(chunk);
+  handleChunk(chunk); // whatever your app already does with each chunk
 }
 
 // When the session is done:
@@ -57,9 +58,11 @@ recorder only notes each chunk's text and how long it took to arrive.
 ```dart
 import 'dart:io';
 
+import 'package:a2ui_core/a2ui_core.dart';
+import 'package:a2ui_flutter/a2ui_flutter.dart';
+import 'package:a2ui_flutter/v0_9/basic_catalog.dart' as v0_9;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:genui/genui.dart';
 import 'package:genui_mock/genui_mock.dart';
 
 void main() {
@@ -69,24 +72,49 @@ void main() {
     );
 
     final transport = GenUiMockTransport(fixture);
-    final controller = SurfaceController(
-      catalogs: [BasicCatalogItems.asCatalog()],
+    final processor = MessageProcessor<ComponentImplementation>(
+      catalogs: [v0_9.basicCatalog()],
     );
-    final conversation = Conversation(
-      transport: transport,
-      controller: controller,
+    final messages = transport.incomingMessages.listen(
+      (message) => processor.processMessages(
+        AgentToRendererMessagePayload.of(message),
+      ),
     );
-    addTearDown(conversation.dispose);
+    addTearDown(() async {
+      await messages.cancel();
+      processor.dispose();
+      transport.dispose();
+    });
 
-    await conversation.sendRequest(ChatMessage.user('say hello'));
+    await transport.sendRequest('say hello');
 
     await tester.pumpWidget(MaterialApp(
-      home: Surface(surfaceContext: controller.contextFor('greeting')),
+      home: Scaffold(
+        body: A2uiSurface(surface: processor.model.getSurface('greeting')!),
+      ),
     ));
 
     expect(find.text('Hello!'), findsOneWidget);
   });
 }
+```
+
+`a2ui_flutter`'s `basicCatalog()` has the basic catalog's canonical id,
+`https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json`. Fixtures
+recorded with `genui` before 0.10.3 carry the old id,
+`https://a2ui.org/specification/v0_9/basic_catalog.json`. To replay them,
+register the basic catalog under the old id as well:
+
+```dart
+final processor = MessageProcessor<ComponentImplementation>(
+  catalogs: [
+    v0_9.basicCatalog(),
+    v0_9.basicCatalog().derive(
+      catalogId: 'https://a2ui.org/specification/v0_9/basic_catalog.json',
+      instructions: v0_9.BasicComponents.api.instructions,
+    ),
+  ],
+);
 ```
 
 Use `readAsStringSync` to load fixtures inside `testWidgets`. Real async file
@@ -154,16 +182,19 @@ stream with `tester.pump` and assert on what is visible at each point:
 
 ```dart
 final transport = GenUiMockTransport(fixture, mode: PlaybackMode.paced);
-// ...controller and conversation as above...
+// ...processor and listener as above...
 
-final reply = conversation.sendRequest(ChatMessage.user('say hello'));
+final reply = transport.sendRequest('say hello');
+await tester.pump(const Duration(milliseconds: 300)); // createSurface arrives
 await tester.pumpWidget(MaterialApp(
-  home: Surface(surfaceContext: controller.contextFor('greeting')),
+  home: Scaffold(
+    body: A2uiSurface(surface: processor.model.getSurface('greeting')!),
+  ),
 ));
 
 expect(find.text('Hello!'), findsNothing);   // still streaming
 
-await tester.pump(const Duration(milliseconds: 700));
+await tester.pump(const Duration(milliseconds: 400));
 await tester.pump();
 
 expect(find.text('Hello!'), findsOneWidget); // fully rendered
@@ -172,13 +203,13 @@ await reply;
 
 ### Asserting on what you sent
 
-`transport.sentMessages` holds every `ChatMessage` passed to `sendRequest`, in
-order. Use it to check that your UI sent the right prompt or action.
+`transport.sentMessages` holds every string passed to `sendRequest`, in order.
+Use it to check that your UI sent the right prompt or action.
 
-### Without GenUI
+### Without A2UI
 
 `GenUiFixturePlayer` replays a fixture as a plain `Stream<String>` with no
-`Transport` involved. That's useful for testing your own chunk handling.
+transport involved. That's useful for testing your own chunk handling.
 
 ```dart
 final player = GenUiFixturePlayer(fixture);
@@ -204,32 +235,41 @@ player.reset(); // back to the first turn
 
 ## API at a glance
 
-| Type | What it does | Needs `genui`? |
+| Type | What it does | Needs A2UI? |
 | --- | --- | --- |
 | `GenUiSessionRecorder` | Wraps a live chunk stream and records it into a fixture | No |
 | `GenUiFixture` | The fixture: `encode()` / `decode()` to and from JSON | No |
 | `RecordedTurn`, `RecordedChunk` | One request/response cycle, and one chunk with its delay | No |
 | `GenUiFixturePlayer`, `replayTurn` | Replay turns as a plain `Stream<String>` | No |
 | `PlaybackMode` | `instant` or `paced` | No |
-| `GenUiMockTransport` | A GenUI `Transport` that replays a fixture | Yes |
+| `GenUiMockTransport` | Replays a fixture as text and A2UI messages | Yes |
 
 ## How it works
 
-GenUI's `Transport` is a four-method interface (`incomingText`,
-`incomingMessages`, `sendRequest`, `dispose`) that separates rendering from any
-particular network client. It has kept the same shape since `genui` `0.8.0`,
-which makes it the most stable seam in the API, so it's the only one this
-package touches.
+`GenUiMockTransport` keeps the shape of the `Transport` interface that `genui`
+had: `incomingText`, `incomingMessages`, `sendRequest` and `dispose`. A test
+reads it the way an app reads its live transport: prose from `incomingText`,
+and A2UI messages from `incomingMessages`, which go to an `a2ui_core`
+`MessageProcessor`.
 
-`GenUiMockTransport` is the only file that imports `genui`. Everything else is
-plain Dart and unaffected by GenUI API changes. The transport doesn't parse
-anything itself: it feeds recorded chunks to GenUI's own
-`A2uiTransportAdapter`, so this package never has to track the A2UI wire
-format.
+`GenUiMockTransport` and its reply parser are the only files that import
+`a2ui_core`. Everything else is plain Dart and unaffected by A2UI API changes.
+The parser is a copy of the one in `genui` 0.10's `A2uiTransportAdapter`, so
+fixtures recorded with `genui` replay as before: A2UI JSON in markdown fences
+or as bare JSON objects becomes messages, and the rest is prose. `a2ui_core`
+parses each message, so this package never has to track the A2UI wire format.
+
+The parser knows only `genui`'s reply format. A model that `a2ui_agent`
+prompts writes `<a2ui-json>` blocks or Express instead. To replay its replies,
+feed `GenUiFixturePlayer`'s chunks to the `a2ui_agent` `ResponseStream` your
+app reads them with.
 
 ## Compatibility
 
-Built against `genui` `0.10.4`. Requires `genui` `^0.10.4`.
+Built against `a2ui_core` `0.5.0`. Requires `a2ui_core` `^0.5.0`. The tests and
+the example render with `a2ui_flutter` `0.1.0`.
+
+Releases up to `0.1.3` were built on `genui`:
 
 | `genui_mock` | `genui` | Notes |
 | --- | --- | --- |
@@ -238,15 +278,16 @@ Built against `genui` `0.10.4`. Requires `genui` `^0.10.4`.
 | `0.1.1` | `^0.10.1` | `0.10.0` moved the A2UI message types into `package:a2ui_core`. |
 | `0.1.0` | `^0.9.2` | Initial release. |
 
-None of these required re-recording fixtures. See the
+None of these required re-recording fixtures, and fixtures recorded with
+`genui` still replay after the move to `a2ui_core`. See the
 [CHANGELOG](CHANGELOG.md) for details.
 
 ## Contributing
 
 Bug reports and pull requests are welcome on
-[GitHub](https://github.com/NJashwanth/genui_mock/issues). If GenUI ships a
-release that breaks replay, an issue with the failing fixture is the most
-useful thing you can send.
+[GitHub](https://github.com/NJashwanth/genui_mock/issues). If an A2UI release
+breaks replay, an issue with the failing fixture is the most useful thing you
+can send.
 
 ## License
 
