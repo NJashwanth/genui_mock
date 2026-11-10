@@ -20,10 +20,10 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  a2ui_core: ^0.5.0
+  a2ui_core: ^0.6.0
 
 dev_dependencies:
-  a2ui_flutter: ^0.1.0
+  a2ui_flutter: ^0.2.0
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0

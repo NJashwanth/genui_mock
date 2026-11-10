@@ -266,8 +266,8 @@ app reads them with.
 
 ## Compatibility
 
-Built against `a2ui_core` `0.5.0`. Requires `a2ui_core` `^0.5.0`. The tests and
-the example render with `a2ui_flutter` `0.1.0`.
+Built against `a2ui_core` `0.6.0`. Requires `a2ui_core` `^0.6.0`. The tests and
+the example render with `a2ui_flutter` `0.2.0`.
 
 Releases up to `0.1.3` were built on `genui`:
 

@@ -1,7 +1,7 @@
 ## Unreleased
 
 * Move from `genui` to the A2UI Dart SDKs, which replace it. `genui_mock`
-  now depends on `a2ui_core` `^0.5.0` instead of `genui` `^0.10.4` and
+  now depends on `a2ui_core` `^0.6.0` instead of `genui` `^0.10.4` and
   `a2ui_core` `^0.1.0`. The fixture format, `GenUiSessionRecorder` and
   `GenUiFixturePlayer` are unchanged.
 * Breaking: `GenUiMockTransport` no longer implements `genui`'s `Transport`.
