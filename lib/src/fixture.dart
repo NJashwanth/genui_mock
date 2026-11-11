@@ -1,9 +1,9 @@
 /// The fixture data model: a plain-Dart, JSON-serializable recording of one
 /// or more GenUI conversation turns.
 ///
-/// Nothing in this file depends on `package:genui`. A fixture is just a
+/// Nothing in this file depends on A2UI. A fixture is just a
 /// sequence of text chunks with the timing they originally arrived with,
-/// which is exactly what a real GenUI [`Transport`] streams in and out —
+/// which is exactly what a real model transport streams in and out —
 /// see `genui_mock_transport.dart` for the one file that bridges the two.
 library;
 
@@ -56,7 +56,7 @@ class RecordedChunk {
 }
 
 /// All the chunks that made up one streamed model response, i.e. everything
-/// that arrived after a single call to `Transport.sendRequest`.
+/// that arrived after a single `sendRequest` call.
 class RecordedTurn {
   /// Creates a [RecordedTurn].
   const RecordedTurn({required this.chunks, this.label});

@@ -1,16 +1,17 @@
 name: genui_mock_example
-description: Demonstrates replaying a genui_mock fixture through GenUI's real widgets.
+description: Demonstrates replaying a genui_mock fixture through A2UI's real widgets.
 publish_to: none
 version: 1.0.0
 
 environment:
   sdk: ">=3.10.0 <4.0.0"
-  flutter: ">=3.35.7"
+  flutter: ">=3.38.0"
 
 dependencies:
   flutter:
     sdk: flutter
-  genui: ^0.10.4
+  a2ui_core: ^0.6.0
+  a2ui_flutter: ^0.2.0
   genui_mock:
     path: ../
 

@@ -1,12 +1,16 @@
-// Demonstrates replaying a recorded genui_mock fixture through GenUI's real
-// `SurfaceController` and `Surface` widget — no network access, no API key.
+// Demonstrates replaying a recorded genui_mock fixture through A2UI's real
+// `MessageProcessor` and `A2uiSurface` widget — no network access, no API key.
 //
 // In a real app the fixture below would come from `GenUiFixture.decode(...)`
 // on a JSON file you saved with `GenUiSessionRecorder` while recording a live
 // session (see the package README). Here it's built in code so this example
 // runs standalone with nothing to record from.
+import 'dart:async';
+
+import 'package:a2ui_core/a2ui_core.dart';
+import 'package:a2ui_flutter/a2ui_flutter.dart';
+import 'package:a2ui_flutter/v0_9/basic_catalog.dart' as v0_9;
 import 'package:flutter/material.dart';
-import 'package:genui/genui.dart';
 import 'package:genui_mock/genui_mock.dart';
 
 void main() => runApp(const ExampleApp());
@@ -60,9 +64,10 @@ class ExampleApp extends StatefulWidget {
 
 class _ExampleAppState extends State<ExampleApp> {
   late final GenUiMockTransport _transport;
-  late final SurfaceController _controller;
-  late final Conversation _conversation;
-  String? _surfaceId;
+  late final MessageProcessor<ComponentImplementation> _processor;
+  late final Subscription _surfaceCreated;
+  late final StreamSubscription<AgentToRendererMessage> _messages;
+  SurfaceModel<ComponentImplementation>? _surface;
 
   @override
   void initState() {
@@ -71,27 +76,31 @@ class _ExampleAppState extends State<ExampleApp> {
       _greetingFixture(),
       mode: PlaybackMode.paced,
     );
-    _controller = SurfaceController(catalogs: [BasicCatalogItems.asCatalog()]);
-    _conversation = Conversation(
-      transport: _transport,
-      controller: _controller,
+    _processor = MessageProcessor(
+      catalogs: [v0_9.basicCatalog()],
+      // The surface streams in over several messages, which the strict
+      // checks would reject.
+      validationConfig: ValidationConfig.relaxed,
     );
 
-    _controller.surfaceUpdates.listen((update) {
-      if (update is SurfaceAdded) {
-        setState(() => _surfaceId = update.surfaceId);
-      }
+    _surfaceCreated = _processor.model.onSurfaceCreated.subscribe((surface) {
+      setState(() => _surface = surface);
     });
+    _messages = _transport.incomingMessages.listen(
+      (message) =>
+          _processor.processMessages(AgentToRendererMessagePayload.of(message)),
+    );
 
     // Replaying a fixture never touches the network — this resolves as soon
     // as the recorded chunks have been replayed.
-    _conversation.sendRequest(ChatMessage.user('Show me a greeting'));
+    _transport.sendRequest('Show me a greeting');
   }
 
   @override
   void dispose() {
-    _conversation.dispose();
-    _controller.dispose();
+    _messages.cancel();
+    _surfaceCreated.unsubscribe();
+    _processor.dispose();
     _transport.dispose();
     super.dispose();
   }
@@ -102,9 +111,9 @@ class _ExampleAppState extends State<ExampleApp> {
       home: Scaffold(
         appBar: AppBar(title: const Text('genui_mock example')),
         body: Center(
-          child: _surfaceId == null
+          child: _surface == null
               ? const CircularProgressIndicator()
-              : Surface(surfaceContext: _controller.contextFor(_surfaceId!)),
+              : A2uiSurface(key: ObjectKey(_surface), surface: _surface!),
         ),
       ),
     );

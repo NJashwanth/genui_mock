@@ -1,3 +1,36 @@
+## Unreleased
+
+* Move from `genui` to the A2UI Dart SDKs, which replace it. `genui_mock`
+  now depends on `a2ui_core` `^0.6.0` instead of `genui` `^0.10.4` and
+  `a2ui_core` `^0.1.0`. The fixture format, `GenUiSessionRecorder` and
+  `GenUiFixturePlayer` are unchanged.
+* Breaking: `GenUiMockTransport` no longer implements `genui`'s `Transport`.
+  It keeps `incomingText`, `incomingMessages`, `sendRequest`, `sentMessages`
+  and `dispose`, and a test reads it the way an app reads its live transport.
+* Breaking: `incomingMessages` emits `a2ui_core` `AgentToRendererMessage`s,
+  the new name of `A2uiMessage`. Pass each one to a `MessageProcessor` with
+  `processMessages(AgentToRendererMessagePayload.of(message))`, and render
+  the surfaces with `a2ui_flutter`'s `A2uiSurface`.
+* Breaking: `sendRequest` takes a `String` instead of a `ChatMessage`, and
+  `sentMessages` is a `List<String>`.
+* Breaking: recorded A2UI JSON that is not a valid message is added to
+  `incomingMessages` as an `A2uiValidationError`. With `genui` it arrived on
+  `incomingText` as an `A2uiValidationException`, and as an uncaught error.
+* Recorded replies are still split into text and A2UI JSON the way `genui`
+  0.10 split them, by a copy of its parser: JSON in markdown fences or bare
+  JSON objects becomes messages. Each message is now parsed by `a2ui_core`
+  0.5, which also accepts v0.9.1 and v1.0 messages, and rejects fields a
+  message does not define and an `updateComponents` with no components.
+* Text still held back when a turn ends, such as an unclosed `{` or markdown
+  fence, now arrives at the end of that turn. With `genui` it waited for the
+  chunks of the next turn.
+* `a2ui_flutter`'s `basicCatalog()` has only the canonical basic catalog id.
+  Fixtures recorded before `genui` 0.10.3 carry the old
+  `https://a2ui.org/specification/v0_9/basic_catalog.json` id, so register
+  the basic catalog under that id too, as the README shows.
+* The example and the README render with `MessageProcessor` and
+  `A2uiSurface`.
+
 ## 0.1.3
 
 * Upgrade to `genui` `^0.10.4` (from `0.10.2`).

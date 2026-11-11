@@ -1,9 +1,9 @@
 /// Records real streamed chunks (and their timing) into a [GenUiFixture],
-/// without depending on `package:genui` at all.
+/// without depending on A2UI at all.
 ///
 /// A [GenUiSessionRecorder] taps whatever `Stream<String>` your app already
-/// feeds into GenUI's transport (e.g. the raw chunks from your model API
-/// call, before they reach `A2uiTransportAdapter.addChunk`). It forwards
+/// reads model replies from (e.g. the raw chunks from your model API call,
+/// before your app parses A2UI messages out of them). It forwards
 /// every chunk through unchanged — so recording never changes what your app
 /// does — while timing the gaps between chunks and accumulating them into
 /// turns you can later save as a fixture.
@@ -25,7 +25,7 @@ import 'fixture.dart';
 /// // ...for each user turn:
 /// final recordedChunks = recorder.recordTurn(rawChunksFromModel);
 /// await for (final chunk in recordedChunks) {
-///   transportAdapter.addChunk(chunk); // app behaves exactly as before
+///   handleChunk(chunk); // app behaves exactly as before
 /// }
 /// // ...once the session is done:
 /// final fixture = recorder.toFixture();

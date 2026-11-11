@@ -5,9 +5,9 @@
 ///
 /// See the package README for the recommended record → save → replay
 /// workflow. [GenUiFixture], [GenUiSessionRecorder], and [GenUiFixturePlayer]
-/// have no dependency on `package:genui`; [GenUiMockTransport] is the small,
-/// isolated adapter that plugs a fixture into GenUI's actual `Transport`
-/// interface.
+/// have no dependency on A2UI; [GenUiMockTransport] is the small, isolated
+/// adapter that replays a fixture as the A2UI messages an `a2ui_core`
+/// `MessageProcessor` renders.
 library;
 
 export 'src/fixture.dart';

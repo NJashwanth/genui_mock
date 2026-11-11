@@ -1,43 +1,45 @@
-/// The only file in this package that imports `package:genui`.
+/// The only file in this package that turns a fixture into A2UI messages.
 ///
 /// Everything else (fixture format, recorder, player) is plain Dart with no
-/// knowledge of GenUI's object model. This file's only job is to satisfy
-/// GenUI's `Transport` interface — the abstraction GenUI itself uses to
-/// decouple its rendering engine from any particular network client — by
-/// replaying a [GenUiFixture] through it.
+/// knowledge of A2UI's object model. This file's only job is to stand in for
+/// the transport an app reads model replies from, by replaying a
+/// [GenUiFixture] as the text and A2UI messages that transport would hand to
+/// an `a2ui_core` `MessageProcessor`.
 ///
-/// Parsing of A2UI messages out of raw text chunks is delegated entirely to
-/// GenUI's own `A2uiTransportAdapter`, so this package never has to track
-/// (or fall behind) the A2UI wire format itself. That delegation is also why
-/// this file requires `genui` >= 0.10.2 — see [GenUiMockTransport.incomingText].
+/// Recorded replies are split into text and A2UI JSON the way `genui` 0.10
+/// split them (see `reply_parser.dart`), and `a2ui_core` parses each message,
+/// so this package never has to track the A2UI wire format itself.
 library;
 
 import 'dart:async';
 
 import 'package:a2ui_core/a2ui_core.dart' as core;
-import 'package:genui/genui.dart';
 
 import 'fixture.dart';
 import 'player.dart';
+import 'reply_parser.dart';
 
-/// A `Transport` that replays a recorded [GenUiFixture] instead of talking
+/// A transport that replays a recorded [GenUiFixture] instead of talking
 /// to a real model.
 ///
-/// Drop this in wherever your app would normally construct its live
-/// `Transport` (e.g. when building a `Conversation`) to get byte-for-byte
-/// deterministic, network-free GenUI output in tests:
+/// Drop this in wherever your app would normally read a live model's
+/// replies, and pass its messages to the `MessageProcessor` that renders your
+/// surfaces, to get byte-for-byte deterministic, network-free A2UI output in
+/// tests:
 ///
 /// ```dart
 /// final fixture = GenUiFixture.decode(await File('test/fixtures/weather.json').readAsString());
 /// final transport = GenUiMockTransport(fixture);
-/// final conversation = Conversation(controller: controller, transport: transport);
-/// await conversation.sendRequest(ChatMessage.user('what is the weather?'));
+/// transport.incomingMessages.listen(
+///   (message) => processor.processMessages(AgentToRendererMessagePayload.of(message)),
+/// );
+/// await transport.sendRequest('what is the weather?');
 /// ```
 ///
 /// Each call to [sendRequest] consumes and replays the fixture's next
 /// recorded turn, mirroring how a real session gets one streamed response
 /// per request.
-class GenUiMockTransport implements Transport {
+class GenUiMockTransport {
   /// Creates a [GenUiMockTransport] that replays [fixture].
   ///
   /// Use [mode] and [speedMultiplier] to control pacing — see
@@ -53,36 +55,51 @@ class GenUiMockTransport implements Transport {
        );
 
   final GenUiFixturePlayer _player;
-  final A2uiTransportAdapter _adapter = A2uiTransportAdapter();
+  final StreamController<String> _text = StreamController.broadcast();
+  final StreamController<core.AgentToRendererMessage> _messages =
+      StreamController.broadcast();
 
   /// Every message passed to [sendRequest] so far, in order — useful for
   /// asserting on what your code under test actually sent.
-  List<ChatMessage> get sentMessages => List.unmodifiable(_sentMessages);
-  final List<ChatMessage> _sentMessages = [];
+  List<String> get sentMessages => List.unmodifiable(_sentMessages);
+  final List<String> _sentMessages = [];
 
   /// The recorded prose, streamed back chunk by chunk exactly as it was
   /// recorded — whitespace included, so concatenating the chunks reproduces
   /// the original text byte for byte.
+  Stream<String> get incomingText => _text.stream;
+
+  /// The A2UI messages in the recorded replies.
   ///
-  /// Requires `genui` >= 0.10.2: earlier versions trimmed every chunk inside
-  /// `A2uiTransportAdapter`, which dropped the whitespace at chunk boundaries
-  /// and ran words together when a sentence spanned more than one chunk.
-  @override
-  Stream<String> get incomingText => _adapter.incomingText;
+  /// Pass each one to an `a2ui_core` `MessageProcessor` with
+  /// `processMessages(AgentToRendererMessagePayload.of(message))`. Recorded
+  /// A2UI JSON that is not a valid message is added to this stream as an
+  /// [core.A2uiValidationError], and the rest of the reply is still replayed.
+  Stream<core.AgentToRendererMessage> get incomingMessages => _messages.stream;
 
-  @override
-  Stream<core.A2uiMessage> get incomingMessages => _adapter.incomingMessages;
-
-  @override
-  Future<void> sendRequest(ChatMessage message) async {
+  /// Records [message] in [sentMessages], then replays the fixture's next
+  /// recorded turn through [incomingText] and [incomingMessages].
+  ///
+  /// [message] is whatever your code would send to the model, such as the
+  /// user's text. The reply is the recorded one, whatever [message] says.
+  ///
+  /// Throws a [StateError] if every recorded turn has already been played.
+  Future<void> sendRequest(String message) async {
     _sentMessages.add(message);
+    final reply = ReplyParser(
+      onText: _text.add,
+      onMessage: _messages.add,
+      onError: _messages.addError,
+    );
     await for (final chunk in _player.playNextTurn()) {
-      _adapter.addChunk(chunk);
+      reply.add(chunk);
     }
+    reply.close();
   }
 
-  @override
+  /// Closes [incomingText] and [incomingMessages].
   void dispose() {
-    _adapter.dispose();
+    _text.close();
+    _messages.close();
   }
 }

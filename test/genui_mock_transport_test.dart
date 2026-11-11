@@ -1,7 +1,8 @@
 import 'package:a2ui_core/a2ui_core.dart';
+import 'package:a2ui_flutter/a2ui_flutter.dart';
+import 'package:a2ui_flutter/v0_9/basic_catalog.dart' as v0_9;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:genui/genui.dart';
 import 'package:genui_mock/genui_mock.dart';
 
 GenUiFixture _fixtureWithSurface() => GenUiFixture(
@@ -27,6 +28,20 @@ GenUiFixture _fixtureWithSurface() => GenUiFixture(
   ],
 );
 
+/// A fixture of one turn made of [chunks], each arriving without delay.
+GenUiFixture _singleTurn(List<String> chunks) => GenUiFixture(
+  name: 'single_turn',
+  recordedAt: DateTime.utc(2026),
+  turns: [
+    RecordedTurn(
+      chunks: [
+        for (final chunk in chunks)
+          RecordedChunk(text: chunk, delay: Duration.zero),
+      ],
+    ),
+  ],
+);
+
 void main() {
   group('GenUiMockTransport', () {
     test('streams recorded text through incomingText', () async {
@@ -34,18 +49,18 @@ void main() {
       addTearDown(transport.dispose);
 
       final textFuture = transport.incomingText.first;
-      await transport.sendRequest(ChatMessage.user('hi'));
+      await transport.sendRequest('hi');
 
       expect(await textFuture, 'Sure, here you go.\n');
     });
 
-    test('parses recorded JSON chunks into real A2uiMessage objects via '
-        "genui's own adapter", () async {
+    test('parses recorded JSON chunks into real a2ui_core '
+        'AgentToRendererMessage objects', () async {
       final transport = GenUiMockTransport(_fixtureWithSurface());
       addTearDown(transport.dispose);
 
       final messageFuture = transport.incomingMessages.first;
-      await transport.sendRequest(ChatMessage.user('hi'));
+      await transport.sendRequest('hi');
       final message = await messageFuture;
 
       expect(message, isA<CreateSurfaceMessage>());
@@ -58,11 +73,11 @@ void main() {
       addTearDown(transport.dispose);
 
       final firstText = transport.incomingText.first;
-      await transport.sendRequest(ChatMessage.user('first question'));
+      await transport.sendRequest('first question');
       expect(await firstText, 'Sure, here you go.\n');
 
       final secondText = transport.incomingText.first;
-      await transport.sendRequest(ChatMessage.user('second question'));
+      await transport.sendRequest('second question');
       expect(await secondText, 'second reply');
     });
 
@@ -70,10 +85,10 @@ void main() {
       final transport = GenUiMockTransport(_fixtureWithSurface());
       addTearDown(transport.dispose);
 
-      await transport.sendRequest(ChatMessage.user('first question'));
-      await transport.sendRequest(ChatMessage.user('second question'));
+      await transport.sendRequest('first question');
+      await transport.sendRequest('second question');
 
-      expect(transport.sentMessages, hasLength(2));
+      expect(transport.sentMessages, ['first question', 'second question']);
     });
 
     test('replays text chunks verbatim, so a sentence split across chunks '
@@ -98,7 +113,7 @@ void main() {
       addTearDown(transport.dispose);
 
       final textFuture = transport.incomingText.take(2).join();
-      await transport.sendRequest(ChatMessage.user('hi'));
+      await transport.sendRequest('hi');
 
       expect(await textFuture, 'the quick brown fox');
     });
@@ -120,20 +135,118 @@ void main() {
         final transport = GenUiMockTransport(fixture);
         addTearDown(transport.dispose);
 
-        await transport.sendRequest(ChatMessage.user('first'));
+        await transport.sendRequest('first');
 
-        expect(
-          () => transport.sendRequest(ChatMessage.user('second')),
-          throwsStateError,
-        );
+        expect(() => transport.sendRequest('second'), throwsStateError);
       },
     );
+  });
+
+  group('reading recorded replies', () {
+    test('reads A2UI JSON in markdown fences and as bare JSON objects, '
+        'and everything else as text', () async {
+      final transport = GenUiMockTransport(
+        _singleTurn([
+          'Here you go:\n',
+          '```json\n['
+              '{"version": "v0.9", "createSurface": '
+              '{"surfaceId": "s1", "catalogId": "core"}},'
+              '{"version": "v0.9", "deleteSurface": {"surfaceId": "s1"}}'
+              ']\n```',
+          '\nAnd one more: ',
+          '{"version": "v0.9", "deleteSurface": ',
+          '{"surfaceId": "s2"}}',
+          '\nDone.',
+        ]),
+      );
+      addTearDown(transport.dispose);
+
+      final messages = <AgentToRendererMessage>[];
+      final text = <String>[];
+      final messageSub = transport.incomingMessages.listen(messages.add);
+      final textSub = transport.incomingText.listen(text.add);
+      await transport.sendRequest('hi');
+      await messageSub.cancel();
+      await textSub.cancel();
+
+      expect(messages, [
+        isA<CreateSurfaceMessage>(),
+        isA<DeleteSurfaceMessage>().having((m) => m.surfaceId, 'id', 's1'),
+        isA<DeleteSurfaceMessage>().having((m) => m.surfaceId, 'id', 's2'),
+      ]);
+      expect(text.join(), 'Here you go:\n\nAnd one more: \nDone.');
+    });
+
+    test('adds recorded A2UI JSON that is not a valid message to '
+        'incomingMessages as an error, and replays the rest', () async {
+      final transport = GenUiMockTransport(
+        _singleTurn([
+          '{"version": "v0.9", "createSurface": {}}',
+          ' Still here. ',
+          '{"version": "v0.9", "deleteSurface": {"surfaceId": "s1"}}',
+        ]),
+      );
+      addTearDown(transport.dispose);
+
+      final messages = <AgentToRendererMessage>[];
+      final errors = <Object>[];
+      final text = <String>[];
+      final messageSub = transport.incomingMessages.listen(
+        messages.add,
+        onError: errors.add,
+      );
+      final textSub = transport.incomingText.listen(text.add);
+      await transport.sendRequest('hi');
+      await messageSub.cancel();
+      await textSub.cancel();
+
+      expect(errors, [isA<A2uiValidationError>()]);
+      expect(messages, [isA<DeleteSurfaceMessage>()]);
+      expect(text.join(), ' Still here. ');
+    });
+
+    test('delivers text held back for an unfinished JSON object at the end '
+        'of its turn', () async {
+      final fixture = GenUiFixture(
+        name: 'unfinished_json',
+        recordedAt: DateTime.utc(2026),
+        turns: [
+          RecordedTurn(
+            chunks: [
+              const RecordedChunk(
+                text: 'Incomplete { json',
+                delay: Duration.zero,
+              ),
+            ],
+          ),
+          RecordedTurn(
+            chunks: [
+              const RecordedChunk(text: 'second reply', delay: Duration.zero),
+            ],
+          ),
+        ],
+      );
+      final transport = GenUiMockTransport(fixture);
+      addTearDown(transport.dispose);
+
+      final text = <String>[];
+      final textSub = transport.incomingText.listen(text.add);
+      await transport.sendRequest('first');
+      await pumpEventQueue();
+      expect(text, ['Incomplete ', '{ json']);
+
+      await transport.sendRequest('second');
+      await pumpEventQueue();
+      await textSub.cancel();
+      expect(text, ['Incomplete ', '{ json', 'second reply']);
+    });
   });
 
   group('rendering through the basic catalog', () {
     // genui 0.10.3 moved basicCatalogId to a new canonical URL and kept the
     // old one as an alias. Fixtures recorded before then carry the old URL
-    // baked into their chunks, so both must keep rendering.
+    // baked into their chunks. a2ui_flutter's basicCatalog() registers only
+    // the canonical id, so the processor registers the old one too.
     const catalogIds = {
       'legacy': 'https://a2ui.org/specification/v0_9/basic_catalog.json',
       'canonical':
@@ -173,27 +286,42 @@ void main() {
           ],
         );
         final transport = GenUiMockTransport(fixture);
-        final controller = SurfaceController(
-          catalogs: [BasicCatalogItems.asCatalog()],
+        final processor = MessageProcessor<ComponentImplementation>(
+          catalogs: [
+            v0_9.basicCatalog(),
+            v0_9.basicCatalog().derive(
+              catalogId: catalogIds['legacy']!,
+              instructions: v0_9.BasicComponents.api.instructions,
+            ),
+          ],
+          validationConfig: ValidationConfig.strict,
         );
-        final conversation = Conversation(
-          transport: transport,
-          controller: controller,
+        final errors = <A2uiRendererError>[];
+        processor.model.onError.subscribe(errors.add);
+        final messages = transport.incomingMessages.listen(
+          (message) => processor.processMessages(
+            AgentToRendererMessagePayload.of(message),
+          ),
         );
-        addTearDown(() {
-          conversation.dispose();
-          controller.dispose();
+        addTearDown(() async {
+          await messages.cancel();
+          processor.dispose();
           transport.dispose();
         });
 
-        await conversation.sendRequest(ChatMessage.user('say hello'));
+        await transport.sendRequest('say hello');
         await tester.pumpWidget(
           MaterialApp(
-            home: Surface(surfaceContext: controller.contextFor('greeting')),
+            home: Scaffold(
+              body: A2uiSurface(
+                surface: processor.model.getSurface('greeting')!,
+              ),
+            ),
           ),
         );
 
         expect(find.text('Hello!'), findsOneWidget);
+        expect(errors, isEmpty);
       });
     }
   });
